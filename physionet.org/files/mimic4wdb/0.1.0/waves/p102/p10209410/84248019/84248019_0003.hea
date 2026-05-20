@@ -1,0 +1,7 @@
+84248019_0003 3 62.4725/999.56(353280) 640
+84248019_0003e.dat 516x4 200/mV 14 8192 0 28323 0 II
+84248019_0003e.dat 516x4 200/mV 14 8192 0 44782 0 V
+84248019_0003e.dat 516x4 200/mV 14 8192 0 7819 0 aVR
+# signal 0 (II): channel=0 bandpass=[0.5,20]
+# signal 1 (V): channel=1 bandpass=[0.5,20]
+# signal 2 (aVR): channel=2 bandpass=[0.5,20]

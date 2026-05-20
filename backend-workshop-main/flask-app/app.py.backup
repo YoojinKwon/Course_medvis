@@ -1,0 +1,445 @@
+from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
+import numpy as np
+from datetime import datetime
+import random
+import os
+
+app = Flask(__name__)
+CORS(app)
+
+# ===== 글로벌 데이터 =====
+patients = []
+waveforms = {}  # {patient_id: waveform_data}
+
+RISK_NAMES = {1: "LOW", 2: "MEDIUM", 3: "HIGH", 4: "CRITICAL"}
+
+def generate_synthetic_waveform(patient_id, seed=None):
+    """환자에 대한 합성 파형 데이터 생성"""
+    if seed is not None:
+        np.random.seed(seed)
+    
+    # 샘플링 레이트 및 길이
+    sampling_rate = 62.4725  # Hz (헤더 파일에서 읽음)
+    duration = 10  # 10초
+    t = np.arange(0, duration, 1/sampling_rate)
+    
+    # ECG 신호 (II, V, aVR 채널)
+    ecg_base = 0.5 * np.sin(2 * np.pi * 1.2 * t)  # 심장 박동 ~72 bpm
+    ecg_II = ecg_base + 0.1 * np.sin(2 * np.pi * 0.1 * t) + np.random.randn(len(t)) * 0.05
+    ecg_V = ecg_base * 0.8 + 0.15 * np.sin(2 * np.pi * 0.15 * t) + np.random.randn(len(t)) * 0.05
+    ecg_aVR = -ecg_base * 0.6 + np.random.randn(len(t)) * 0.05
+    
+    # ABP (혈압) 신호
+    heart_rate = 70 + random.randint(-10, 10)
+    abp = 100 + 30 * np.sin(2 * np.pi * (heart_rate/60) * t) + 20 * np.sin(2 * np.pi * 2 * (heart_rate/60) * t)
+    abp += np.random.randn(len(t)) * 2
+    
+    # Pleth (광전맥파 검사) 신호
+    pleth = 50 + 40 * np.sin(2 * np.pi * (heart_rate/60) * t) + np.random.randn(len(t)) * 3
+    
+    # Resp (호흡) 신호
+    resp = 20 * np.sin(2 * np.pi * 0.3 * t) + np.random.randn(len(t)) * 1
+    
+    return {
+        't': t.tolist(),
+        'channels': {
+            'II': ecg_II.tolist(),
+            'V': ecg_V.tolist(),
+            'aVR': ecg_aVR.tolist(),
+            'ABP': abp.tolist(),
+            'Pleth': pleth.tolist(),
+            'Resp': resp.tolist()
+        },
+        'sampling_rate': sampling_rate,
+        'duration': duration
+    }
+
+def calculate_waveform_similarity(waveform1, waveform2, channel='II'):
+    """두 파형 간의 유사도 계산 (상관계수 사용)"""
+    try:
+        signal1 = np.array(waveform1['channels'].get(channel, []))
+        signal2 = np.array(waveform2['channels'].get(channel, []))
+        
+        if len(signal1) == 0 or len(signal2) == 0:
+            return 0.0
+        
+        # 길이 맞추기
+        min_len = min(len(signal1), len(signal2))
+        signal1 = signal1[:min_len]
+        signal2 = signal2[:min_len]
+        
+        # 정규화
+        signal1 = (signal1 - np.mean(signal1)) / (np.std(signal1) + 1e-10)
+        signal2 = (signal2 - np.mean(signal2)) / (np.std(signal2) + 1e-10)
+        
+        # 상관계수
+        correlation = np.corrcoef(signal1, signal2)[0, 1]
+        return float(correlation) if not np.isnan(correlation) else 0.0
+    except:
+        return 0.0
+
+def find_similar_segments(waveform1, waveform2, channel='II', window_size=100):
+    """두 파형에서 유사도가 높은 구간 찾기"""
+    try:
+        signal1 = np.array(waveform1['channels'].get(channel, []))
+        signal2 = np.array(waveform2['channels'].get(channel, []))
+        
+        if len(signal1) < window_size or len(signal2) < window_size:
+            return []
+        
+        similar_segments = []
+        
+        for i in range(len(signal2) - window_size):
+            window = signal2[i:i+window_size]
+            correlations = []
+            
+            for j in range(len(signal1) - window_size):
+                segment = signal1[j:j+window_size]
+                corr = np.corrcoef(window, segment)[0, 1]
+                if not np.isnan(corr):
+                    correlations.append((j, corr))
+            
+            if correlations:
+                best_match = max(correlations, key=lambda x: x[1])
+                if best_match[1] > 0.7:  # 유사도 threshold
+                    similar_segments.append({
+                        'position': i,
+                        'matched_position': best_match[0],
+                        'similarity': best_match[1],
+                        'size': window_size
+                    })
+        
+        return similar_segments[:5]  # top 5만 반환
+    except:
+        return []
+
+def get_segment_wise_similarity(waveform1, waveform2, channel='II', segment_duration=1.0):
+    """구간별 유사도 계산 - 시간대별로 유사도 매핑"""
+    try:
+        signal1 = np.array(waveform1['channels'].get(channel, []))
+        signal2 = np.array(waveform2['channels'].get(channel, []))
+        
+        if len(signal1) != len(signal2):
+            # 길이를 맞춤
+            min_len = min(len(signal1), len(signal2))
+            signal1 = signal1[:min_len]
+            signal2 = signal2[:min_len]
+        
+        sampling_rate = waveform1.get('sampling_rate', 62.4725)
+        segment_size = int(sampling_rate * segment_duration)
+        
+        if segment_size <= 0:
+            segment_size = 100
+        
+        similarities = []
+        
+        # 구간별로 유사도 계산
+        for i in range(0, len(signal1) - segment_size, segment_size):
+            segment1 = signal1[i:i+segment_size]
+            segment2 = signal2[i:i+segment_size]
+            
+            # 정규화
+            seg1_normalized = (segment1 - np.mean(segment1)) / (np.std(segment1) + 1e-10)
+            seg2_normalized = (segment2 - np.mean(segment2)) / (np.std(segment2) + 1e-10)
+            
+            # 상관계수 계산
+            try:
+                corr = np.corrcoef(seg1_normalized, seg2_normalized)[0, 1]
+                similarity = float(corr) if not np.isnan(corr) else 0.0
+            except:
+                similarity = 0.0
+            
+            time_start = i / sampling_rate
+            time_end = (i + segment_size) / sampling_rate
+            
+            similarities.append({
+                'time_start': round(time_start, 2),
+                'time_end': round(time_end, 2),
+                'segment_index': len(similarities),
+                'similarity': max(0.0, min(1.0, similarity))  # 0~1로 정규화
+            })
+        
+        return similarities
+    except Exception as e:
+        print(f"구간 유사도 계산 오류: {e}")
+        return []
+
+def calculate_risk_score(data):
+    """생체 신호 데이터에서 위험도 점수 계산"""
+    if not isinstance(data, dict):
+        return random.randint(1, 4)
+    
+    risk_score = 1
+    
+    # 심박수 기반 위험도
+    heart_rate = data.get("heart_rate", 70)
+    if heart_rate < 50 or heart_rate > 120:
+        risk_score = max(risk_score, 3)
+    elif heart_rate < 60 or heart_rate > 100:
+        risk_score = max(risk_score, 2)
+    
+    # 산소 포화도 기반 위험도
+    oxygen_sat = data.get("oxygen_saturation", 98)
+    if oxygen_sat < 90:
+        risk_score = 4
+    elif oxygen_sat < 95:
+        risk_score = max(risk_score, 3)
+    
+    # 혈압 기반 위험도
+    systolic = data.get("systolic", 120)
+    if systolic > 180 or systolic < 90:
+        risk_score = max(risk_score, 3)
+    elif systolic > 160 or systolic < 100:
+        risk_score = max(risk_score, 2)
+    
+    return risk_score
+
+def get_risk_level_name(risk_score):
+    """위험도 점수를 이름으로 변환"""
+    risk_names = {1: "LOW", 2: "MEDIUM", 3: "HIGH", 4: "CRITICAL"}
+    return risk_names.get(risk_score, "UNKNOWN")
+
+def initialize_patient_data():
+    """초기 환자 데이터 15명 생성"""
+    global patients, next_id
+    
+    medicalReasons = [
+        '급성 심근경색',
+        '폐렴',
+        '뇌졸중',
+        '패혈증',
+        '급성 신부전',
+        '심부전 악화',
+        '천식 발작',
+        '당뇨병 합병증',
+        '고혈압 위기',
+        '흉부 통증',
+        '의식 저하',
+        '호흡곤란',
+        '복부 통증',
+        '외상',
+    ]
+    
+    procedures = [
+        'ECG 모니터링',
+        '산소 요법',
+        '정맥 주입',
+        'CT 스캔',
+        '혈액 검사',
+        '심초음파',
+        '흉부 X선',
+        '혈역학 모니터링',
+        'MRI',
+        '내시경',
+        '카테터 삽입',
+        '약물 투여',
+        '산소포화도 측정',
+        '지속적 심 모니터링',
+    ]
+    
+    departments = ['내과', '응급실', '중환자실', '수술실', '신경과', '심장내과']
+    names = ['김영수', '이미영', '박준호', '최유진', '정민준', '한소영', '윤현수', '조은일', '강두영', '백민지', '송지훈', '허준현', '문성진', '오준영', '임지호']
+    
+    # 위험도별 분포: Critical 1명, High 3명, Medium 5명, Low 6명
+    riskDistribution = [4, 3, 3, 3, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1]
+    
+    patients = []
+    next_id = 1
+    
+    for idx, risk_score in enumerate(riskDistribution):
+        vitals = {
+            "heart_rate": risk_score == 4 and (random.randint(30, 40) if random.random() > 0.5 else random.randint(120, 140)) or random.randint(60, 100),
+            "oxygen_saturation": risk_score == 4 and random.randint(82, 89) or (risk_score == 3 and random.randint(92, 96) or random.randint(96, 100)),
+            "systolic": risk_score == 4 and random.randint(150, 200) or (risk_score == 3 and random.randint(140, 160) or random.randint(110, 140)),
+            "diastolic": risk_score == 4 and random.randint(80, 130) or (risk_score == 3 and random.randint(70, 100) or random.randint(65, 85)),
+            "temperature": round(random.uniform(36.0, 39.0), 1),
+        }
+        
+        record = {
+            "id": next_id,
+            "name": names[idx] if idx < len(names) else f"환자 {next_id}",
+            "age": random.randint(25, 80),
+            "department": departments[random.randint(0, len(departments) - 1)],
+            "risk_score": risk_score,
+            "risk_level": get_risk_level_name(risk_score),
+            "vitals": vitals,
+            "admitted_at": datetime.now().isoformat(),
+            "admission_reason": medicalReasons[random.randint(0, len(medicalReasons) - 1)],
+            "procedures": [
+                procedures[random.randint(0, len(procedures) - 1)],
+                procedures[random.randint(0, len(procedures) - 1)],
+            ],
+            "notes": f"{'[긴급] ' if risk_score == 4 else ''}상태 모니터링 중",
+            "waveform_path": f"p1{str(next_id).zfill(7)}"
+        }
+        
+        patients.append(record)
+        next_id += 1
+
+
+@app.route("/")
+def home():
+  return render_template("index.html")
+
+
+@app.route("/api/patients")
+def list_patients():
+  # 위험도 점수로 내림차순 정렬 (높은 위험도 먼저)
+  sorted_patients = sorted(patients, key=lambda x: x.get("risk_score", 1), reverse=True)
+  return jsonify({
+    "patients": sorted_patients,
+    "count": len(sorted_patients)
+  })
+
+
+@app.route("/api/patients", methods=["POST"])
+def create_patient():
+  global next_id
+  data = request.get_json()
+  
+  # 생체 신호 데이터 (임의 값 또는 제공된 값 사용)
+  vitals = data.get("vitals", {
+    "heart_rate": random.randint(60, 100),
+    "oxygen_saturation": random.randint(95, 100),
+    "systolic": random.randint(110, 130),
+    "diastolic": random.randint(70, 85),
+    "temperature": round(random.uniform(36.5, 37.5), 1)
+  })
+  
+  risk_score = calculate_risk_score(vitals)
+  
+  record = {
+    "id": next_id,
+    "name": data.get("name", f"Patient {next_id}"),
+    "age": data.get("age", 0),
+    "department": data.get("department", "Unknown"),
+    "notes": data.get("notes", ""),
+    "vitals": vitals,
+    "risk_score": risk_score,
+    "risk_level": get_risk_level_name(risk_score),
+    "admitted_at": datetime.now().isoformat(),
+    "waveform_path": data.get("waveform_path", "")
+  }
+  patients.append(record)
+  next_id += 1
+  return jsonify(record), 201
+
+
+@app.route("/api/patients/<int:patient_id>")
+def get_patient(patient_id):
+  for p in patients:
+    if p["id"] == patient_id:
+      return jsonify(p)
+  return jsonify({"error": "Patient not found"}), 404
+
+
+@app.route("/api/patients/<int:patient_id>", methods=["DELETE"])
+def delete_patient(patient_id):
+  global patients
+  before = len(patients)
+  patients = [p for p in patients if p["id"] != patient_id]
+  if len(patients) == before:
+    return jsonify({"error": "Patient not found"}), 404
+  return jsonify({"message": f"Patient {patient_id} deleted"})
+
+
+@app.route("/api/waveforms/<int:patient_id>")
+def get_waveform(patient_id):
+  """특정 환자의 파형 데이터 반환"""
+  try:
+    # 캐시에서 확인
+    if patient_id not in waveform_cache:
+      waveform_cache[patient_id] = generate_synthetic_waveform(patient_id, seed=patient_id)
+    
+    return jsonify(waveform_cache[patient_id])
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/waveforms/<int:patient_id>/similar")
+def get_similar_waveforms(patient_id):
+  """특정 환자와 유사한 파형 상위 5개 반환"""
+  try:
+    # 기준 파형
+    if patient_id not in waveform_cache:
+      waveform_cache[patient_id] = generate_synthetic_waveform(patient_id, seed=patient_id)
+    
+    reference_waveform = waveform_cache[patient_id]
+    
+    # 다른 환자들과의 유사도 계산
+    similarities = []
+    for p in patients:
+      if p["id"] != patient_id:
+        if p["id"] not in waveform_cache:
+          waveform_cache[p["id"]] = generate_synthetic_waveform(p["id"], seed=p["id"])
+        
+        other_waveform = waveform_cache[p["id"]]
+        similarity_score = calculate_waveform_similarity(reference_waveform, other_waveform, 'II')
+        
+        similarities.append({
+          "patient_id": p["id"],
+          "patient_name": p.get("name", "Unknown"),
+          "patient_age": p.get("age", 0),
+          "patient_department": p.get("department", "Unknown"),
+          "similarity": similarity_score,
+          "rank": 0
+        })
+    
+    # 상위 5개만 선택 (유사도 높은 순)
+    similarities = sorted(similarities, key=lambda x: x["similarity"], reverse=True)[:5]
+    
+    # 순위 지정
+    for idx, item in enumerate(similarities):
+      item["rank"] = idx + 1
+    
+    return jsonify({
+      "reference_patient_id": patient_id,
+      "similar_waveforms": similarities
+    })
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/waveforms/<int:patient_id>/compare/<int:other_patient_id>")
+def compare_waveforms(patient_id, other_patient_id):
+  """두 환자의 파형을 비교하고 구간별 유사도 계산"""
+  try:
+    if patient_id not in waveform_cache:
+      waveform_cache[patient_id] = generate_synthetic_waveform(patient_id, seed=patient_id)
+    
+    if other_patient_id not in waveform_cache:
+      waveform_cache[other_patient_id] = generate_synthetic_waveform(other_patient_id, seed=other_patient_id)
+    
+    waveform1 = waveform_cache[patient_id]
+    waveform2 = waveform_cache[other_patient_id]
+    
+    # 구간별 유사도 계산 (1초 단위)
+    segment_similarities = get_segment_wise_similarity(waveform1, waveform2, 'II', segment_duration=1.0)
+    
+    # 전체 유사도도 함께 반환
+    overall_similarity = calculate_waveform_similarity(waveform1, waveform2, 'II')
+    
+    # 높은 유사도 구간 (상위 3개)
+    high_similarity_segments = sorted(
+      segment_similarities, 
+      key=lambda x: x['similarity'], 
+      reverse=True
+    )[:3]
+    
+    return jsonify({
+      "patient1_id": patient_id,
+      "patient2_id": other_patient_id,
+      "overall_similarity": overall_similarity,
+      "segment_similarities": segment_similarities,
+      "high_similarity_segments": high_similarity_segments
+    })
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+if __name__ == "__main__":
+  # 초기 환자 데이터 로드
+  initialize_patient_data()
+  print(f"✓ {len(patients)}명의 초기 환자 데이터 로드됨")
+  app.run(debug=True, host="0.0.0.0", port=5001)

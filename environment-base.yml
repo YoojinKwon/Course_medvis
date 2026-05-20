@@ -1,0 +1,11 @@
+name: medvis
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - git
+  - nodejs=20
+  - npm
+prefix: /opt/conda/envs/medvis

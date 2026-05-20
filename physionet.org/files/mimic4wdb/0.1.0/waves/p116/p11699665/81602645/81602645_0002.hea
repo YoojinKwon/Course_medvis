@@ -1,0 +1,17 @@
+81602645_0002 9 62.4725/999.56(88719360) 320
+81602645_0002e.dat 516x4 200/mV 14 8192 0 60057 0 V
+81602645_0002e.dat 516x4 200/mV 14 8192 0 7894 0 II
+81602645_0002e.dat 516x4 200/mV 14 8192 0 59531 0 aVR
+81602645_0002e.dat 516x4 200/mV 14 8192 0 64532 0 I
+81602645_0002e.dat 516x4 200/mV 14 8192 0 7618 0 III
+81602645_0002e.dat 516x4 200/mV 14 8192 0 59625 0 aVL
+81602645_0002e.dat 516x4 200/mV 14 8192 0 7436 0 aVF
+81602645_0002p.dat 516x2 4096(0)/NU 12 2048 0 3690 0 Pleth
+81602645_0002r.dat 516 2060(1018)/Ohm 11 1024 0 51766 0 Resp
+# signal 0 (V): channel=0 bandpass=[0.5,20]
+# signal 1 (II): channel=1 bandpass=[0.5,20]
+# signal 2 (aVR): channel=2 bandpass=[0.5,20]
+# signal 3 (I): channel=3 bandpass=[0.5,20]
+# signal 4 (III): channel=4 bandpass=[0.5,20]
+# signal 5 (aVL): channel=5 bandpass=[0.5,20]
+# signal 6 (aVF): channel=6 bandpass=[0.5,20]

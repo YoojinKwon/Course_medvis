@@ -1,0 +1,17 @@
+88733244_0009 9 62.4725/999.56(41169920) 320
+88733244_0009e.dat 516x4 200/mV 14 8192 0 61753 0 II
+88733244_0009e.dat 516x4 200/mV 14 8192 0 10301 0 V
+88733244_0009e.dat 516x4 200/mV 14 8192 0 59045 0 aVR
+88733244_0009e.dat 516x4 2(0)/mV 1 1 0 0 0 ECG #0
+88733244_0009e.dat 516x4 2(0)/mV 1 1 0 0 0 ECG #0+
+88733244_0009e.dat 516x4 2(0)/mV 1 1 0 0 0 ECG #0++
+88733244_0009e.dat 516x4 2(0)/mV 1 1 0 0 0 ECG #0+++
+88733244_0009p.dat 516x2 4096(0)/NU 12 2048 0 27403 0 Pleth
+88733244_0009r.dat 516 3250(423)/Ohm 12 2048 0 47067 0 Resp
+# signal 0 (II): channel=0 bandpass=[0.5,35]
+# signal 1 (V): channel=1 bandpass=[0.5,35]
+# signal 2 (aVR): channel=2 bandpass=[0.5,35]
+# signal 3 (ECG #0): channel=3
+# signal 4 (ECG #0+): channel=4
+# signal 5 (ECG #0++): channel=5
+# signal 6 (ECG #0+++): channel=6
