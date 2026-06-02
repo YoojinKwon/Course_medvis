@@ -99,80 +99,89 @@ export const WaveformDetail = () => {
 
   return (
     <div className="waveform-container">
-      <div className="waveform-header">
-        <button className="btn-back" onClick={handleBack}>
-          ← 돌아가기
-        </button>
-        <div className="header-info">
-          <h1>🏥 파형 데이터 상세</h1>
-          <p>환자: {patientId} | 검사: {examId}</p>
+      {/* 상단 박스 - 헤더 */}
+      <div className="section-box top-section">
+        <div className="waveform-header">
+          <button className="btn-back" onClick={handleBack}>
+            ← 돌아가기
+          </button>
+          <div className="header-info">
+            <h1>🏥 파형 데이터 상세</h1>
+            <p>환자: {patientId} | 검사: {examId}</p>
+          </div>
         </div>
       </div>
 
       {error && <div className="error-message">{error}</div>}
 
-      <div className="channel-selector">
-        <label>채널 선택:</label>
-        <div className="channel-buttons">
-          {availableChannels.map((channel) => (
-            <button
-              key={channel}
-              className={`channel-btn ${selectedChannel === channel ? 'active' : ''}`}
-              onClick={() => setSelectedChannel(channel)}
-            >
-              {channel}
-            </button>
-          ))}
+      {/* 중단 박스 - 채널 선택 */}
+      <div className="section-box middle-section">
+        <div className="channel-selector">
+          <label>채널 선택:</label>
+          <div className="channel-buttons">
+            {availableChannels.map((channel) => (
+              <button
+                key={channel}
+                className={`channel-btn ${selectedChannel === channel ? 'active' : ''}`}
+                onClick={() => setSelectedChannel(channel)}
+              >
+                {channel}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {waveformData && (
+          <div className="waveform-info">
+            <div className="info-item">
+              <span className="label">채널:</span>
+              <span className="value">{waveformData.channel}</span>
+            </div>
+            <div className="info-item">
+              <span className="label">샘플링 레이트:</span>
+              <span className="value">{waveformData.sampling_rate.toFixed(2)} Hz</span>
+            </div>
+            <div className="info-item">
+              <span className="label">지속 시간:</span>
+              <span className="value">{waveformData.duration.toFixed(2)} 초</span>
+            </div>
+            <div className="info-item">
+              <span className="label">단위:</span>
+              <span className="value">{waveformData.unit}</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {waveformData && (
-        <div className="waveform-info">
-          <div className="info-item">
-            <span className="label">채널:</span>
-            <span className="value">{waveformData.channel}</span>
-          </div>
-          <div className="info-item">
-            <span className="label">샘플링 레이트:</span>
-            <span className="value">{waveformData.sampling_rate.toFixed(2)} Hz</span>
-          </div>
-          <div className="info-item">
-            <span className="label">지속 시간:</span>
-            <span className="value">{waveformData.duration.toFixed(2)} 초</span>
-          </div>
-          <div className="info-item">
-            <span className="label">단위:</span>
-            <span className="value">{waveformData.unit}</span>
-          </div>
-        </div>
-      )}
-
+      {/* 하단 박스 - 차트 */}
       {chartData.length > 0 && (
-        <div className="chart-container">
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="time"
-                label={{ value: '시간 (초)', position: 'insideBottomRight', offset: -5 }}
-              />
-              <YAxis label={{ value: selectedChannel, angle: -90, position: 'insideLeft' }} />
-              <Tooltip
-                formatter={(value) => value.toFixed(3)}
-                labelFormatter={(value) => `${value.toFixed(2)}초`}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#667eea"
-                dot={false}
-                isAnimationActive={false}
-                strokeWidth={2}
-                name={`${selectedChannel} 신호`}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+        <div className="section-box bottom-section">
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="time"
+                  label={{ value: '시간 (초)', position: 'insideBottomRight', offset: -5 }}
+                />
+                <YAxis label={{ value: selectedChannel, angle: -90, position: 'insideLeft' }} />
+                <Tooltip
+                  formatter={(value) => value.toFixed(3)}
+                  labelFormatter={(value) => `${value.toFixed(2)}초`}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#667eea"
+                  dot={false}
+                  isAnimationActive={false}
+                  strokeWidth={2}
+                  name={`${selectedChannel} 신호`}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>

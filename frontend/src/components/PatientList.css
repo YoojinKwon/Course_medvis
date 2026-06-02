@@ -1,48 +1,61 @@
-.patient-list-container {
-  padding: 20px;
-  background: #f5f5f5;
-  min-height: 100vh;
+/* ===== CSS 변수 정의 (TradingView Dark Theme) ===== */
+:root {
+  --color-bg-dark: #262934;
+  --color-bg-card: #0f0f0fff;
+  --color-bg-card-alt: #0f0f0fff;
+  --color-border: #131722;
+  --color-text-primary: #d1d4dc;
+  --color-text-secondary: #787b86;
+  --color-success: #26a69a;
+  --color-danger: #ef5350;
+  --color-warning: #ff9800;
+  --color-primary: #2962ff;
 }
 
-.list-header {
+/* 페이지 래퍼 */
+.patient-list-page {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  background: white;
-  padding: 24px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  flex-direction: column;
+  height: 100vh;
+  background: var(--color-bg-dark);
+  overflow: hidden;
+}
+
+/* 헤더 */
+.page-header {
+  display: none;
 }
 
 .header-content h1 {
-  margin: 0 0 8px 0;
-  font-size: 28px;
+  margin: 0 0 4px 0;
+  font-size: 20px;
   font-weight: 700;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .header-content p {
   margin: 0;
-  font-size: 14px;
-  color: #999;
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
 .btn-refresh {
-  padding: 10px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 8px 16px;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   transition: all 0.3s ease;
+  flex-shrink: 0;
 }
 
 .btn-refresh:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(41, 98, 255, 0.4);
+  background: #3d71ff;
 }
 
 .btn-refresh:disabled {
@@ -50,152 +63,655 @@
   cursor: not-allowed;
 }
 
+/* 에러 메시지 */
 .error-message {
-  background: #ffebee;
-  color: #c62828;
-  padding: 12px 16px;
-  border-radius: 4px;
-  margin-bottom: 16px;
-  border-left: 4px solid #c62828;
+  padding: 8px 24px;
+  margin: 0;
+  background: rgba(239, 83, 80, 0.1);
+  color: var(--color-danger);
+  border-radius: 0;
+  border-left: 4px solid var(--color-danger);
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
-.stats-bar {
+/* 컨트롤 바 (채널 선택 + 검색창 통합) */
+.control-bar {
+  padding: 12px 24px;
+  background: var(--color-bg-card);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  flex-shrink: 0;
 }
 
-.stat-item {
-  flex: 1;
-  background: white;
-  padding: 16px;
-  border-radius: 8px;
+/* 채널 선택 (인라인) */
+.channel-selector-inline {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
 }
 
-.stat-label {
+.channel-selector-inline label {
+  display: none;
+}
+
+.channel-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.channel-btn {
+  padding: 6px 12px;
+  appearance: none;
+  background: transparent !important;
+  color: #ffffff !important;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
   font-size: 12px;
   font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
+  transition: all 0.3s ease;
 }
 
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #333;
+.channel-btn:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff;
+  border-color: transparent;
 }
 
-.exams-list {
+.channel-btn.active {
+  background: transparent !important;
+  color: #ffffff;
+  border-color: transparent;
+}
+
+/* 검색 바 (인라인) */
+.search-bar-inline {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 350px;
 }
 
-.exams-table {
-  display: flex;
-  flex-direction: column;
+.search-bar-inline .search-input {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card-alt);
+  border-radius: 6px;
+  font-size: 16px;
+  color: var(--color-text-primary);
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.search-bar-inline .search-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.search-bar-inline .search-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(41, 98, 255, 0.1);
+}
+
+.search-bar-inline .search-clear-btn {
+  padding: 6px 10px;
+  background: var(--color-border);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  transition: all 0.2s ease;
+}
+
+.search-bar-inline .search-clear-btn:hover {
+  background: #353a47;
+  color: var(--color-text-primary);
+}
+
+/* 메인 콘텐츠 (2단 레이아웃) */
+.main-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 0;
+  padding: 16px 24px;
+  overflow: hidden;
+  flex: 1;
+  position: relative;
+}
+
+/* 패널 리사이저 */
+.panel-resizer {
+  cursor: col-resize;
+  background: linear-gradient(90deg, transparent 0%, var(--color-border) 50%, transparent 100%);
+  transition: background 0.2s ease;
+  user-select: none;
+  align-self: stretch;
+}
+
+.panel-resizer:hover {
+  background: linear-gradient(90deg, transparent 0%, var(--color-primary) 50%, transparent 100%);
+}
+
+.main-content.resizing {
+  user-select: none;
+}
+
+.main-content.resizing .panel-resizer {
+  background: linear-gradient(90deg, transparent 0%, var(--color-primary) 50%, transparent 100%);
+}
+
+/* 좌측 패널 */
+.left-panel {
+  background: transparent;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.left-panel-title {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+
+.patient-preview-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+  align-content: start;
+}
+
+.patient-preview-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.patient-preview-list::-webkit-scrollbar-track {
+  background: var(--color-bg-dark);
+  border-radius: 3px;
+}
+
+.patient-preview-list::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+.patient-preview-list::-webkit-scrollbar-thumb:hover {
+  background: #454d60;
+}
+
+.patient-preview-card {
+  position: relative;
+  padding: 6px 6px 0 6px;
+  background: var(--color-bg-card-alt);
+  border: 2px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 150px;
+  overflow: hidden;
+}
+
+.patient-preview-card:hover {
+  background: #262b3a;
+  border-color: #353a47;
+  transform: translateY(-1px);
+}
+
+.patient-preview-card.selected {
+  background: rgba(41, 98, 255, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(41, 98, 255, 0.2);
+}
+
+.patient-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0;
+  flex-shrink: 0;
+  height: 18px;
+}
+
+.patient-preview-name {
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-size: 24px;
+}
+
+.exam-count-badge {
+  padding: 1px 5px;
+  background: var(--color-primary);
+  color: white;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.mini-chart-container {
+  width: 100%;
+  background: transparent;
+  border-radius: 4px;
+  border: transparent;
+  flex: 1;
+  min-height: 80px;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15px;
+}
+
+.mini-loading,
+.mini-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.risk-badge-container {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 0;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.risk-badge.risk-high {
+  background: rgba(239, 83, 80, 0.15);
+  color: #ef5350;
+}
+
+.risk-badge.risk-medium {
+  background: rgba(255, 183, 77, 0.15);
+  color: #ffb74d;
+}
+
+.risk-badge.risk-low {
+  background: rgba(102, 187, 106, 0.15);
+  color: #66bb6a;
 }
 
 .loading-state,
 .empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: #999;
-  font-size: 16px;
-}
-
-@media (max-width: 768px) {
-  .list-header {
-    flex-direction: column;
-    gap: 16px;
-    align-items: flex-start;
-  }
-
-  .stats-bar {
-    flex-direction: column;
-  }
-
-  .patient-id {
-    font-size: 12px;
-  }
-}
-}
-
-.controls {
   display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.search-box {
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
   flex: 1;
 }
 
-.search-input {
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-  background: white;
-  transition: border-color 0.2s;
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: #2196F3;
-  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
-}
-
-.error-message {
-  background: #ffebee;
-  color: #c62828;
-  padding: 12px 16px;
-  border-radius: 4px;
-  margin-bottom: 16px;
-  font-size: 14px;
-}
-
-.patients-list {
+/* 우측 패널 */
+.right-panel {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  border: none;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  height: 100%;
   gap: 12px;
 }
 
-.empty-state {
-  background: white;
-  padding: 48px 24px;
+/* 상단 섹션: 환자 정보 */
+.right-section-top {
+  background: var(--color-bg-card);
   border-radius: 8px;
-  text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-border);
+  overflow-y: auto;
+  flex: 0 0 40%;
 }
 
-.empty-state p {
+.right-section-top::-webkit-scrollbar {
+  width: 6px;
+}
+
+.right-section-top::-webkit-scrollbar-track {
+  background: var(--color-bg-dark);
+  border-radius: 3px;
+}
+
+.right-section-top::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+.right-section-top::-webkit-scrollbar-thumb:hover {
+  background: #454d60;
+}
+
+/* 중단 섹션: 생체신호 Waveform */
+.right-section-middle {
+  background: var(--color-bg-card);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 15%;
+  overflow: hidden;
+}
+
+.right-section-middle h3 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.full-waveform-chart {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 하단 섹션: 추가 정보 */
+.right-section-bottom {
+  background: var(--color-bg-card);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-border);
+  flex: 0 0 45%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.right-section-bottom::-webkit-scrollbar {
+  width: 6px;
+}
+
+.right-section-bottom::-webkit-scrollbar-track {
+  background: var(--color-bg-dark);
+  border-radius: 3px;
+}
+
+.right-section-bottom::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+.right-section-bottom::-webkit-scrollbar-thumb:hover {
+  background: #454d60;
+}
+
+/* 검색 결과 */
+.right-panel-search {
+  background: var(--color-bg-card);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-border);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.patient-info {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 0;
+}
+
+/* 환자 헤더 (ID + 검사 ID 뱃지) */
+.patient-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.patient-info h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: left;
+}
+
+.exam-id-badge {
+  background: linear-gradient(135deg, #2962ff 0%, #1e53e5 100%);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 24px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 다른 검사 섹션 */
+.other-exams-section {
+  margin-bottom: 16px;
+}
+
+.other-exams-section label {
+  display: block;
+  font-size: 24px;
+  font-weight: 600;
+  color: #b2b5be;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.exam-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.exam-btn {
+  padding: 6px 12px;
+  background: var(--color-bg-card-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  transition: all 0.3s ease;
+}
+
+.exam-btn:hover {
+  background: #262b3a;
+  border-color: #454d60;
+  color: var(--color-text-primary);
+}
+
+.exam-btn.active {
+  background: linear-gradient(135deg, #2962ff 0%, #1e53e5 100%);
+  border-color: #2962ff;
+  color: white;
+}
+
+/* (스타일이 .right-section-middle로 통합됨) */
+
+.full-waveform-chart {
+  flex: 1;
+  min-height: 0;
+}
+
+/* (스타일이 .right-section-bottom로 통합됨) */
+
+.patient-info h3 {
+  margin: 16px 0 8px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #b2b5be;
+  text-align: left;
+  letter-spacing: 0.5px;
+}
+
+.info-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.info-group label {
+  font-size: 24px;
+  font-weight: 600;
+  color: #b2b5be;
+  margin-bottom: 4px;
+  text-align: left;
+}
+
+.info-value {
+  font-size: 28px;
+  color: #e8eaef;
+  padding: 8px 12px;
+  background: var(--color-bg-card-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
+  text-align: left;
+}
+
+/* 검색 결과 */
+.search-results {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.search-results h2 {
+  margin: 0 0 12px 0;
   font-size: 16px;
-  color: #999;
-  margin-bottom: 24px;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+  font-weight: 700;
 }
 
-@media (max-width: 768px) {
-  .list-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+.search-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
 
-  .header-actions {
-    width: 100%;
-    margin-top: 16px;
-  }
+.search-results-list::-webkit-scrollbar {
+  width: 6px;
+}
 
-  .controls {
-    flex-direction: column;
-  }
+.search-results-list::-webkit-scrollbar-track {
+  background: var(--color-bg-dark);
+  border-radius: 3px;
+}
 
-  .stats-bar {
-    grid-template-columns: repeat(2, 1fr);
+.search-results-list::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+.search-results-list::-webkit-scrollbar-thumb:hover {
+  background: #454d60;
+}
+
+.search-result-item {
+  padding: 12px;
+  background: var(--color-bg-card-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.search-result-item:hover {
+  background: #262b3a;
+  border-color: #353a47;
+  transform: translateX(4px);
+}
+
+.search-result-item:active {
+  background: rgba(41, 98, 255, 0.1);
+  border-color: var(--color-primary);
+}
+
+.result-patient-id {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-size: 36px;
+  margin-bottom: 4px;
+}
+
+.result-exam-count {
+  font-size: 33px;
+  color: var(--color-text-secondary);
+}
+
+/* 상세 차트 컨테이너 */
+.detail-chart-container {
+  width: 100%;
+  height: 300px;
+  background: var(--color-bg-dark);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  margin-top: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-loading,
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+/* 반응형 레이아웃 */
+@media (max-width: 1200px) {
+  .main-content {
+    grid-template-columns: 1fr;
   }
 }
