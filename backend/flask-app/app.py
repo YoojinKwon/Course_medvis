@@ -7,6 +7,8 @@ import wfdb
 import os
 from pathlib import Path
 import json
+import gzip
+import csv
 
 app = Flask(__name__)
 CORS(app)
@@ -96,9 +98,16 @@ def extract_channels_from_exam(exam_folder):
     """
     Exam 폴더에서 첫 번째 segment 파일을 분석하여 채널 목록 추출
     MIMIC-IV는 다중 segment 포맷을 사용합니다.
+    CSV.GZ 파일이 있으면 ['HR', 'SpO2'] 채널 추가
     """
     channels = []
     exam_name = exam_folder.name
+    
+    # CSV.GZ 파일 확인
+    csv_gz_file = exam_folder / f"{exam_name}n.csv.gz"
+    if csv_gz_file.exists():
+        # CSV.GZ 파일이 있으면 HR과 SpO2 채널 사용
+        return ['HR', 'SpO2']
     
     # segment 파일 찾기 (examid_000X.hea 형식)
     segment_files = sorted(list(exam_folder.glob(f"{exam_name}_*.hea")))
@@ -124,11 +133,85 @@ def extract_channels_from_exam(exam_folder):
         print(f"⚠️  채널 추출 실패 ({exam_folder.name}): {e}")
         return []
 
+def load_csv_gz_data(exam_folder, channel):
+    """
+    CSV.GZ 파일에서 HR 또는 SpO2 데이터 로드
+    """
+    exam_name = exam_folder.name
+    csv_gz_file = exam_folder / f"{exam_name}n.csv.gz"
+    
+    if not csv_gz_file.exists():
+        return None
+    
+    try:
+        # 컬럼 인덱스 정의
+        CHANNEL_COLUMNS = {
+            'HR': 2,      # 'HR [bpm]'
+            'SpO2': 16    # 'SpO2 [%]'
+        }
+        
+        if channel not in CHANNEL_COLUMNS:
+            return None
+        
+        col_idx = CHANNEL_COLUMNS[channel]
+        time_data = []
+        value_data = []
+        
+        # CSV.GZ 파일 읽기
+        with gzip.open(csv_gz_file, 'rt') as f:
+            reader = csv.reader(f)
+            headers = next(reader)  # 헤더 스킵
+            
+            for row in reader:
+                try:
+                    if len(row) > col_idx:
+                        # time 값 (밀리초 -> 초로 변환)
+                        time_ms = float(row[0])
+                        time_sec = time_ms / 1000.0
+                        
+                        # 채널 값
+                        value_str = row[col_idx].strip()
+                        if value_str:  # 빈 값 제외
+                            value = float(value_str)
+                            time_data.append(time_sec)
+                            value_data.append(value)
+                except (ValueError, IndexError):
+                    continue
+        
+        if not time_data:
+            return None
+        
+        # 데이터 다운샘플링 (너무 많은 데이터 포인트 제외)
+        # 최대 2000개 포인트로 제한
+        if len(time_data) > 2000:
+            step = len(time_data) // 2000
+            time_data = time_data[::step]
+            value_data = value_data[::step]
+        
+        # 단위 설정
+        unit = 'bpm' if channel == 'HR' else '%'
+        
+        waveform_data = {
+            't': time_data,
+            'value': value_data,
+            'channel': channel,
+            'sampling_rate': len(time_data) / (time_data[-1] - time_data[0]) if len(time_data) > 1 and time_data[-1] > time_data[0] else 1.0,
+            'duration': time_data[-1] - time_data[0] if len(time_data) > 1 else 0.0,
+            'unit': unit
+        }
+        
+        return waveform_data
+        
+    except Exception as e:
+        print(f"⚠️  CSV.GZ 로드 실패 ({exam_name}/{channel}): {e}")
+        return None
+
 def load_waveform_data(patient_id, exam_id, channel):
     """
     MIMIC-IV 데이터에서 실제 파형 데이터 로드 (캐시 사용)
     multi-segment 포맷 지원
     각 segment는 다른 채널을 가질 수 있으므로, 요청된 채널이 있는 segment를 찾음
+    HR/SpO2는 CSV.GZ 파일에서 로드
     """
     cache_key = f"{patient_id}_{exam_id}_{channel}"
     
@@ -141,6 +224,13 @@ def load_waveform_data(patient_id, exam_id, channel):
     
     if not exam_folder.exists():
         return None
+    
+    # HR 또는 SpO2 채널이면 CSV.GZ에서 로드
+    if channel in ['HR', 'SpO2']:
+        waveform_data = load_csv_gz_data(exam_folder, channel)
+        if waveform_data:
+            waveforms_cache[cache_key] = waveform_data
+        return waveform_data
     
     try:
         # 모든 segment 파일 찾기
@@ -258,10 +348,12 @@ if __name__ == '__main__':
     if patients:
         print(f"✅ {len(patients)}명의 환자 데이터 로드 완료")
         print(f"✅ 검사 데이터 준비 완료")
-        for p in patients[:3]:  # 처음 3명 샘플
+        for p in patients[:6]:  # 모든 환자 정보 출력
             print(f"   - 환자 {p['patient_id']}: {p['exam_count']}개 검사")
+            for exam in p['exams']:
+                print(f"     * 검사 {exam['exam_id']}: {exam['channels']}")
     else:
         print("⚠️  환자 데이터를 로드할 수 없습니다.")
     
-    app.run(debug=False, port=5001, threaded=True)
+    app.run(debug=False, port=5002, threaded=True)
 

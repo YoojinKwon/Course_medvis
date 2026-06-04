@@ -4,13 +4,20 @@ import SimilarSignalsList from './SimilarSignalsList';
 import { generateDummySimilarSignals } from '../utils/dummySimilarSignals';
 import './PatientList.css';
 
-const API_BASE = 'http://localhost:5001/api';
+const API_BASE = 'http://localhost:5002/api';
 
 // 공통 유틸 함수: 위험도 계산
 const getRiskLevelValue = (patientId) => {
   const riskLevels = ['LOW', 'MEDIUM', 'HIGH'];
   const index = parseInt(patientId) % 3;
   return riskLevels[index];
+};
+
+// 채널별 색상
+const getChannelColor = (channel) => {
+  if (channel === 'HR') return '#ef4444';
+  if (channel === 'SpO2') return '#099981ff';
+  return '#667eea';
 };
 
 // 공통 유틸 함수: 파형 데이터 변환
@@ -24,38 +31,42 @@ const convertWaveformData = (data, endIndex) => {
 
 // 환자 미리보기 카드 컴포넌트
 const PatientPreviewCard = ({ patient, isSelected, onSelect, API_BASE }) => {
+  const [allDataHR, setAllDataHR] = useState([]);
+  const [allDataSpO2, setAllDataSpO2] = useState([]);
   const [chartData, setChartData] = useState([]);
-  const [allData, setAllData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [streamIndex, setStreamIndex] = useState(0);
 
   // 환자의 위험도
   const riskLevel = getRiskLevelValue(patient.patient_id);
 
-  // 기본 검사와 신호 데이터 가져오기
+  const channels = patient.exams?.[0]?.channels || [];
+  const examId = patient.exams?.[0]?.exam_id;
+
+  // HR과 SpO2 동시 fetch
   useEffect(() => {
-    if (!patient.exams || patient.exams.length === 0) return;
+    if (!examId) return;
 
-    const defaultExam = patient.exams[0];
-    const defaultChannel = defaultExam.channels?.[0] || 'I';
-
-    const fetchWaveform = async () => {
+    const fetchBoth = async () => {
       try {
         setLoading(true);
-        const response = await fetch(
-          `${API_BASE}/waveforms/${patient.patient_id}/${defaultExam.exam_id}/${defaultChannel}`
+        const fetches = channels.map(ch =>
+          fetch(`${API_BASE}/waveforms/${patient.patient_id}/${examId}/${ch}`)
+            .then(r => r.ok ? r.json() : null)
         );
-        if (response.ok) {
-          const data = await response.json();
-          // 원본 데이터 저장 (샘플링 없음)
-          const fullData = data.t.map((time, idx) => ({
+        const results = await Promise.all(fetches);
+
+        const parse = (data) =>
+          data?.t.map((time, idx) => ({
             time: parseFloat(time.toFixed(2)),
-            value: data.value[idx] || 0,
-          }));
-          setAllData(fullData);
-          setChartData([]); // 차트 초기화 (스트리밍 시작)
-          setStreamIndex(0);
-        }
+            value: data.value[idx] ?? 0,
+          })) || [];
+
+        const hrIdx = channels.indexOf('HR');
+        const spo2Idx = channels.indexOf('SpO2');
+        if (hrIdx !== -1) setAllDataHR(parse(results[hrIdx]));
+        if (spo2Idx !== -1) setAllDataSpO2(parse(results[spo2Idx]));
+        setStreamIndex(0);
       } catch (err) {
         console.error('Waveform fetch error:', err);
       } finally {
@@ -63,28 +74,41 @@ const PatientPreviewCard = ({ patient, isSelected, onSelect, API_BASE }) => {
       }
     };
 
-    fetchWaveform();
+    fetchBoth();
   }, [patient, API_BASE]);
 
-  // 스트리밍 로직 (미니 차트용) - 무한 반복
+  // 스트리밍 로직 - 무한 반복
   useEffect(() => {
-    if (allData.length === 0 || loading) return;
+    const maxLen = Math.max(allDataHR.length, allDataSpO2.length);
+    if (maxLen === 0 || loading) return;
 
     const interval = setInterval(() => {
-      setStreamIndex(prev => (prev + 5) % allData.length); // 무한 반복
-    }, 200); // 200ms마다 추가
+      setStreamIndex(prev => (prev + 5) % maxLen);
+    }, 200);
 
     return () => clearInterval(interval);
-  }, [allData, loading]);
+  }, [allDataHR, allDataSpO2, loading]);
 
-  // 스트리밍 데이터 업데이트 (슬라이딩 윈도우: 최근 100개)
+  // 슬라이딩 윈도우 (최근 100개) - HR/SpO2를 하나의 배열로 병합
   useEffect(() => {
-    if (allData.length === 0) return;
-    const sliced = allData.slice(0, streamIndex);
-    // 최근 100개만 표시
-    const windowed = sliced.slice(Math.max(0, sliced.length - 100));
-    setChartData(windowed);
-  }, [streamIndex, allData]);
+    const maxLen = Math.max(allDataHR.length, allDataSpO2.length);
+    if (maxLen === 0) return;
+
+    const sliceEnd = streamIndex === 0 ? maxLen : streamIndex;
+    const start = Math.max(0, sliceEnd - 100);
+
+    const merged = [];
+    for (let i = start; i < sliceEnd; i++) {
+      merged.push({
+        time: allDataHR[i]?.time ?? allDataSpO2[i]?.time ?? i,
+        HR: allDataHR[i]?.value,
+        SpO2: allDataSpO2[i]?.value,
+      });
+    }
+    setChartData(merged);
+  }, [streamIndex, allDataHR, allDataSpO2]);
+
+  const hasData = chartData.length > 0;
 
   return (
     <div
@@ -93,37 +117,27 @@ const PatientPreviewCard = ({ patient, isSelected, onSelect, API_BASE }) => {
     >
       <div className="patient-preview-header">
         <div className="patient-preview-name"> 👤 {patient.patient_id}</div>
-        {/* <div className="exam-count-badge">{patient.exam_count}</div> */}
       </div>
 
       {/* 미니 차트 */}
       <div className="mini-chart-container">
         {loading ? (
           <div className="mini-loading">Loading...</div>
-        ) : chartData.length === 0 ? (
+        ) : !hasData ? (
           <div className="mini-empty">Loading...</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 20, right: 5, left: 12, bottom: 0 }} style={{ background: '#131722' }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2e39" />
-              <XAxis
-                dataKey="time"
-                tick={false}
-                domain={["dataMin", "dataMax"]}
-                type="number"
-              />
-              <YAxis 
-                tick={{ fontSize: 18, fill: '#d1d4dc' }} 
-                width={40} 
-              />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#099981ff"
-                strokeWidth={2}
-                dot={false}
-                isAnimationActive={false}
-              />
+              <XAxis dataKey="time" tick={false} domain={["dataMin", "dataMax"]} type="number" />
+              <YAxis yAxisId="HR" orientation="left" tick={{ fontSize: 11, fill: getChannelColor('HR') }} width={36} />
+              <YAxis yAxisId="SpO2" orientation="right" tick={{ fontSize: 11, fill: getChannelColor('SpO2') }} width={36} />
+              {channels.includes('HR') && (
+                <Line yAxisId="HR" type="monotone" dataKey="HR" stroke={getChannelColor('HR')} strokeWidth={2} dot={false} isAnimationActive={false} />
+              )}
+              {channels.includes('SpO2') && (
+                <Line yAxisId="SpO2" type="monotone" dataKey="SpO2" stroke={getChannelColor('SpO2')} strokeWidth={2} dot={false} isAnimationActive={false} />
+              )}
             </LineChart>
           </ResponsiveContainer>
         )}
@@ -145,7 +159,7 @@ export const PatientList = () => {
   const [error, setError] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [selectedExam, setSelectedExam] = useState(null);
-  const [selectedChannel, setSelectedChannel] = useState('I');
+  const [selectedChannel, setSelectedChannel] = useState('HR');
   const [detailWaveformData, setDetailWaveformData] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -170,7 +184,7 @@ export const PatientList = () => {
         setSelectedPatient(firstPatient);
         if (firstPatient.exams?.length > 0) {
           setSelectedExam(firstPatient.exams[0]);
-          setSelectedChannel('I');
+          setSelectedChannel(firstPatient.exams[0].channels?.[0] || 'HR');
         }
       }
     } catch (err) {
@@ -245,14 +259,14 @@ export const PatientList = () => {
     setSelectedPatient(patient);
     if (patient.exams?.length > 0) {
       setSelectedExam(patient.exams[0]);
-      setSelectedChannel('I');
+      setSelectedChannel(patient.exams[0].channels?.[0] || 'HR');
     }
   }, []);
 
   // 검사 선택 핸들러
   const handleExamSelect = useCallback((exam) => {
     setSelectedExam(exam);
-    setSelectedChannel('I');
+    setSelectedChannel(exam.channels?.[0] || 'HR');
   }, []);
 
   // 우측 패널용 차트 데이터 준비 (메모이제이션)
@@ -495,7 +509,7 @@ export const PatientList = () => {
                           <Line
                             type="monotone"
                             dataKey="value"
-                            stroke="#099981ff"
+                            stroke={getChannelColor(selectedChannel)}
                             strokeWidth={1}
                             dot={false}
                             isAnimationActive={false}

@@ -6,13 +6,15 @@ import './WaveformDetail.css';
 export const WaveformDetail = () => {
   const { patientId, examId } = useParams();
   const navigate = useNavigate();
-  const [waveformData, setWaveformData] = useState(null);
+  const [waveformDataHR, setWaveformDataHR] = useState(null);
+  const [waveformDataSpO2, setWaveformDataSpO2] = useState(null);
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [availableChannels, setAvailableChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [hasHRSpO2, setHasHRSpO2] = useState(false);
 
-  const API_BASE = 'http://localhost:5001/api';
+  const API_BASE = 'http://localhost:5002/api';
 
   // 현재 환자-검사의 사용 가능한 채널 목록을 먼저 가져오기
   useEffect(() => {
@@ -31,7 +33,18 @@ export const WaveformDetail = () => {
         if (!exam) throw new Error('검사를 찾을 수 없습니다.');
 
         setAvailableChannels(exam.channels);
-        setSelectedChannel(exam.channels[0]); // 첫 번째 채널로 초기화
+        
+        // HR과 SpO2가 모두 있는지 확인
+        const hasHR = exam.channels.includes('HR');
+        const hasSpO2 = exam.channels.includes('SpO2');
+        setHasHRSpO2(hasHR && hasSpO2);
+        
+        // 초기 채널 선택
+        if (hasHR && hasSpO2) {
+          setSelectedChannel('HR+SpO2'); // 특수 채널 표시기
+        } else {
+          setSelectedChannel(exam.channels[0]);
+        }
       } catch (err) {
         setError(err.message);
         console.error(err);
@@ -43,9 +56,56 @@ export const WaveformDetail = () => {
     fetchExamInfo();
   }, [patientId, examId]);
 
-  // 선택된 채널의 파형 데이터 가져오기
+  // HR과 SpO2 데이터 동시 로드 (있으면)
   useEffect(() => {
-    if (!selectedChannel) return;
+    if (!hasHRSpO2) return;
+
+    const fetchBothChannels = async () => {
+      try {
+        setLoading(true);
+        
+        // HR과 SpO2가 실제로 있는지 확인
+        const [responseHR, responseSpO2] = await Promise.all([
+          fetch(`${API_BASE}/waveforms/${patientId}/${examId}/HR`),
+          fetch(`${API_BASE}/waveforms/${patientId}/${examId}/SpO2`)
+        ]);
+        
+        // 한쪽이라도 실패하면 fallback을 사용
+        if (responseHR.ok && responseSpO2.ok) {
+          const dataHR = await responseHR.json();
+          const dataSpO2 = await responseSpO2.json();
+          
+          setWaveformDataHR(dataHR);
+          setWaveformDataSpO2(dataSpO2);
+          setError(null);
+        } else {
+          // HR/SpO2 중 하나라도 없으면 첫 번째 채널 사용
+          if (availableChannels.length > 0) {
+            const fallbackChannel = availableChannels[0];
+            const response = await fetch(`${API_BASE}/waveforms/${patientId}/${examId}/${fallbackChannel}`);
+            if (!response.ok) {
+              throw new Error('파형 데이터를 불러올 수 없습니다.');
+            }
+            const data = await response.json();
+            setWaveformDataHR(data);
+            setWaveformDataSpO2(null);
+            setError(null);
+          }
+        }
+      } catch (err) {
+        setError(err.message);
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBothChannels();
+  }, [patientId, examId, hasHRSpO2, availableChannels]);
+
+  // 다른 채널 데이터 로드
+  useEffect(() => {
+    if (!selectedChannel || selectedChannel === 'HR+SpO2') return;
 
     const fetchWaveform = async () => {
       try {
@@ -55,7 +115,8 @@ export const WaveformDetail = () => {
         );
         if (!response.ok) throw new Error('파형 데이터를 가져올 수 없습니다.');
         const data = await response.json();
-        setWaveformData(data);
+        setWaveformDataHR(data);
+        setWaveformDataSpO2(null);
         setError(null);
       } catch (err) {
         setError(err.message);
@@ -68,12 +129,28 @@ export const WaveformDetail = () => {
     fetchWaveform();
   }, [selectedChannel, patientId, examId]);
 
-  // 차트 데이터 준비
-  const prepareChartData = () => {
-    if (!waveformData) return [];
+  // 이중 Y축 차트용 데이터 준비 (HR + SpO2)
+  const prepareChartDataDualAxis = () => {
+    if (!waveformDataHR || !waveformDataSpO2) return [];
 
-    const t = waveformData.t;
-    const value = waveformData.value;
+    const tHR = waveformDataHR.t;
+    const valueHR = waveformDataHR.value;
+    const valueSpO2 = waveformDataSpO2.value;
+
+    // HR과 SpO2의 시간축이 같다고 가정하고 매칭
+    return tHR.map((time, idx) => ({
+      time: parseFloat(time.toFixed(2)),
+      HR: valueHR[idx] || 0,
+      SpO2: valueSpO2[idx] || 0,
+    }));
+  };
+
+  // 단축 Y축 차트용 데이터 준비
+  const prepareChartData = () => {
+    if (!waveformDataHR) return [];
+
+    const t = waveformDataHR.t;
+    const value = waveformDataHR.value;
 
     return t.map((time, idx) => ({
       time: parseFloat(time.toFixed(2)),
@@ -81,13 +158,11 @@ export const WaveformDetail = () => {
     }));
   };
 
-  const chartData = prepareChartData();
-
   const handleBack = () => {
     navigate('/');
   };
 
-  if (loading && !waveformData) {
+  if (loading && !waveformDataHR) {
     return (
       <div className="waveform-container">
         <div className="loading-state">
@@ -96,6 +171,11 @@ export const WaveformDetail = () => {
       </div>
     );
   }
+
+  // 표시할 차트 데이터 선택
+  const chartData = selectedChannel === 'HR+SpO2' 
+    ? prepareChartDataDualAxis() 
+    : prepareChartData();
 
   return (
     <div className="waveform-container">
@@ -128,26 +208,40 @@ export const WaveformDetail = () => {
                 {channel}
               </button>
             ))}
+            {hasHRSpO2 && (
+              <button
+                className={`channel-btn ${selectedChannel === 'HR+SpO2' ? 'active' : ''}`}
+                onClick={() => setSelectedChannel('HR+SpO2')}
+              >
+                HR + SpO2
+              </button>
+            )}
           </div>
         </div>
 
-        {waveformData && (
+        {waveformDataHR && (
           <div className="waveform-info">
             <div className="info-item">
               <span className="label">채널:</span>
-              <span className="value">{waveformData.channel}</span>
+              <span className="value">
+                {selectedChannel === 'HR+SpO2' ? 'HR + SpO2' : waveformDataHR.channel}
+              </span>
             </div>
             <div className="info-item">
               <span className="label">샘플링 레이트:</span>
-              <span className="value">{waveformData.sampling_rate.toFixed(2)} Hz</span>
+              <span className="value">{waveformDataHR.sampling_rate.toFixed(2)} Hz</span>
             </div>
             <div className="info-item">
               <span className="label">지속 시간:</span>
-              <span className="value">{waveformData.duration.toFixed(2)} 초</span>
+              <span className="value">{waveformDataHR.duration.toFixed(2)} 초</span>
             </div>
             <div className="info-item">
               <span className="label">단위:</span>
-              <span className="value">{waveformData.unit}</span>
+              <span className="value">
+                {selectedChannel === 'HR+SpO2' 
+                  ? 'HR: bpm, SpO2: %' 
+                  : waveformDataHR.unit}
+              </span>
             </div>
           </div>
         )}
@@ -158,28 +252,80 @@ export const WaveformDetail = () => {
         <div className="section-box bottom-section">
           <div className="chart-container">
             <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="time"
-                  label={{ value: '시간 (초)', position: 'insideBottomRight', offset: -5 }}
-                />
-                <YAxis label={{ value: selectedChannel, angle: -90, position: 'insideLeft' }} />
-                <Tooltip
-                  formatter={(value) => value.toFixed(3)}
-                  labelFormatter={(value) => `${value.toFixed(2)}초`}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#667eea"
-                  dot={false}
-                  isAnimationActive={false}
-                  strokeWidth={2}
-                  name={`${selectedChannel} 신호`}
-                />
-              </LineChart>
+              {selectedChannel === 'HR+SpO2' ? (
+                // 이중 Y축 차트
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="time"
+                    label={{ value: '시간 (초)', position: 'insideBottomRight', offset: -5 }}
+                  />
+                  {/* 왼쪽 Y축: HR */}
+                  <YAxis
+                    yAxisId="left"
+                    label={{ value: 'HR (bpm)', angle: -90, position: 'insideLeft' }}
+                    domain={[0, 200]}
+                  />
+                  {/* 오른쪽 Y축: SpO2 */}
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    label={{ value: 'SpO2 (%)', angle: 90, position: 'insideRight' }}
+                    domain={[80, 100]}
+                  />
+                  <Tooltip
+                    formatter={(value) => value.toFixed(1)}
+                    labelFormatter={(value) => `${value.toFixed(2)}초`}
+                  />
+                  <Legend />
+                  {/* HR 라인 (왼쪽 Y축) */}
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="HR"
+                    stroke="#ff7300"
+                    dot={false}
+                    isAnimationActive={false}
+                    strokeWidth={2}
+                    name="심박수 (HR)"
+                  />
+                  {/* SpO2 라인 (오른쪽 Y축) */}
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="SpO2"
+                    stroke="#00c49f"
+                    dot={false}
+                    isAnimationActive={false}
+                    strokeWidth={2}
+                    name="산소포화도 (SpO2)"
+                  />
+                </LineChart>
+              ) : (
+                // 단일 Y축 차트
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="time"
+                    label={{ value: '시간 (초)', position: 'insideBottomRight', offset: -5 }}
+                  />
+                  <YAxis label={{ value: selectedChannel, angle: -90, position: 'insideLeft' }} />
+                  <Tooltip
+                    formatter={(value) => value.toFixed(3)}
+                    labelFormatter={(value) => `${value.toFixed(2)}초`}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#667eea"
+                    dot={false}
+                    isAnimationActive={false}
+                    strokeWidth={2}
+                    name={`${selectedChannel} 신호`}
+                  />
+                </LineChart>
+              )}
             </ResponsiveContainer>
           </div>
         </div>
