@@ -1,8 +1,0 @@
-81312415_0005 4 62.4725/999.56(107520) 192
-81312415_0005e.dat 516x4 200/mV 14 8192 0 64985 0 II
-81312415_0005e.dat 516x4 200(8192)/mV 1 1 0 0 0 V
-81312415_0005e.dat 516x4 200(8192)/mV 1 1 0 0 0 aVR
-81312415_0005r.dat 516 575(1761)/Ohm 11 1024 0 40288 0 Resp
-# signal 0 (II): channel=0 bandpass=[0.5,35]
-# signal 1 (V): channel=1 bandpass=[0.5,35]
-# signal 2 (aVR): channel=2 bandpass=[0.5,35]
