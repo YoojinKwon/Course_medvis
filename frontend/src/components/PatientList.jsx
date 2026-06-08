@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import SimilarSignalsList from './SimilarSignalsList';
-import { generateDummySimilarSignals } from '../utils/dummySimilarSignals';
+import { mlService } from '../services/mlService';
 import './PatientList.css';
 
 const API_BASE = 'http://localhost:5002/api';
@@ -246,13 +246,14 @@ export const PatientList = () => {
     return () => clearInterval(interval);
   }, [detailWaveformData]);
 
-  // 유사 신호 데이터 로드 (채널 선택 변경 시)
+  // 유사 신호 데이터 로드 (환자 선택 변경 시, ML Service 호출)
   useEffect(() => {
-    if (selectedPatient && selectedExam && selectedChannel) {
-      const signals = generateDummySimilarSignals();
-      setSimilarSignals(signals);
-    }
-  }, [selectedPatient, selectedExam, selectedChannel]);
+    if (!selectedPatient) return;
+    mlService
+      .getSimilar(selectedPatient.patient_id)
+      .then(setSimilarSignals)
+      .catch(() => setSimilarSignals([]));
+  }, [selectedPatient]);
 
   // 환자 선택 핸들러
   const handlePatientSelect = useCallback((patient) => {

@@ -1,3 +1,7 @@
+import sys
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
+
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import numpy as np
@@ -33,8 +37,12 @@ app.json_encoder = NumpyEncoder
 patients = []  # Real patients from MIMIC-IV
 waveforms_cache = {}  # {patient_id: {exam_id: {channel: waveform_data}}}
 
-# MIMIC-IV 데이터 경로
-MIMIC_DATA_ROOT = "/Users/kyj/Documents/2026-1/MedVis/physionet.org/files/mimic4wdb/0.1.0/waves/p100"
+# MIMIC-IV 데이터 경로 (p100 + 추가 환자 디렉토리)
+WAVES_ROOT = Path(__file__).resolve().parents[3] / "data" / "mimic4wdb" / "waves"
+MIMIC_DATA_ROOT = str(WAVES_ROOT / "p100")   # 하위 호환용
+EXTRA_PATIENT_DIRS = [
+    WAVES_ROOT / "p101" / "p10112163",   # 제우스 샘플
+]
 
 RISK_NAMES = {1: "LOW", 2: "MEDIUM", 3: "HIGH", 4: "CRITICAL"}
 SAMPLING_RATE = 62.4725
@@ -48,50 +56,58 @@ def extract_patient_id(folder_name):
         return folder_name[1:]
     return folder_name
 
+def scan_patient_folder(patient_folder):
+    """patient 폴더 하나를 스캔해서 환자 dict 반환. 검사 없으면 None."""
+    patient_id = extract_patient_id(patient_folder.name)
+    exams = []
+    for exam_folder in sorted(patient_folder.iterdir()):
+        if exam_folder.is_dir() and exam_folder.name.isdigit():
+            channels = extract_channels_from_exam(exam_folder)
+            if channels:
+                exams.append({
+                    'exam_id': exam_folder.name,
+                    'channels': channels,
+                    'path': str(exam_folder)
+                })
+    if not exams:
+        return None
+    return {
+        'patient_id': patient_id,
+        'exams': exams,
+        'exam_count': len(exams),
+        'admitted_at': datetime.now().isoformat()
+    }
+
 def scan_mimic_data():
     """
-    MIMIC-IV p100 폴더 스캔하여 환자 및 검사 정보 수집
+    MIMIC-IV p100 폴더 + EXTRA_PATIENT_DIRS 스캔하여 환자 및 검사 정보 수집
     """
     global patients
     patients = []
-    
+    seen_ids = set()
+
+    # p100 전체 스캔
     p100_path = Path(MIMIC_DATA_ROOT)
-    if not p100_path.exists():
+    if p100_path.exists():
+        for patient_folder in sorted(p100_path.iterdir()):
+            if patient_folder.is_dir() and patient_folder.name.startswith('p'):
+                p = scan_patient_folder(patient_folder)
+                if p and p['patient_id'] not in seen_ids:
+                    patients.append(p)
+                    seen_ids.add(p['patient_id'])
+                    print(f"✅ 환자 {p['patient_id']}: {p['exam_count']}개 검사 로드됨")
+    else:
         print(f"❌ MIMIC-IV 데이터 경로 없음: {MIMIC_DATA_ROOT}")
-        return
-    
-    # p100 하위 모든 patient 폴더 스캔
-    patient_folders = sorted([d for d in p100_path.iterdir() if d.is_dir() and d.name.startswith('p')])
-    
-    for patient_folder in patient_folders:
-        patient_id = extract_patient_id(patient_folder.name)
-        
-        # 각 patient 폴더 안의 exam 폴더들 스캔
-        exams = []
-        for exam_folder in patient_folder.iterdir():
-            if exam_folder.is_dir() and exam_folder.name.isdigit():
-                exam_id = exam_folder.name
-                
-                # 각 exam 폴더에서 채널 정보 추출
-                channels = extract_channels_from_exam(exam_folder)
-                
-                if channels:  # 채널이 있는 경우만 추가
-                    exams.append({
-                        'exam_id': exam_id,
-                        'channels': channels,
-                        'path': str(exam_folder)
-                    })
-        
-        if exams:  # 검사가 있는 경우만 환자 추가
-            patient = {
-                'patient_id': patient_id,
-                'exams': exams,
-                'exam_count': len(exams),
-                'admitted_at': datetime.now().isoformat()
-            }
-            patients.append(patient)
-            print(f"✅ 환자 {patient_id}: {len(exams)}개 검사 로드됨")
-    
+
+    # 추가 환자 폴더 스캔
+    for extra_dir in EXTRA_PATIENT_DIRS:
+        if extra_dir.exists() and extra_dir.is_dir():
+            p = scan_patient_folder(extra_dir)
+            if p and p['patient_id'] not in seen_ids:
+                patients.append(p)
+                seen_ids.add(p['patient_id'])
+                print(f"✅ 환자 {p['patient_id']} (추가): {p['exam_count']}개 검사 로드됨")
+
     print(f"\n✅ 총 {len(patients)}명의 환자 데이터 로드 완료")
 
 def extract_channels_from_exam(exam_folder):
@@ -144,24 +160,32 @@ def load_csv_gz_data(exam_folder, channel):
         return None
     
     try:
-        # 컬럼 인덱스 정의
-        CHANNEL_COLUMNS = {
-            'HR': 2,      # 'HR [bpm]'
-            'SpO2': 16    # 'SpO2 [%]'
+        # 채널명 → CSV 컬럼 접두사 매핑
+        CHANNEL_PREFIXES = {
+            'HR':   'HR [',
+            'SpO2': 'SpO2 [',
         }
-        
-        if channel not in CHANNEL_COLUMNS:
+
+        if channel not in CHANNEL_PREFIXES:
             return None
-        
-        col_idx = CHANNEL_COLUMNS[channel]
+
         time_data = []
         value_data = []
-        
+        col_idx = None
+
         # CSV.GZ 파일 읽기
         with gzip.open(csv_gz_file, 'rt') as f:
             reader = csv.reader(f)
-            headers = next(reader)  # 헤더 스킵
-            
+            headers = next(reader)
+            # 헤더에서 채널 컬럼 인덱스 동적 탐색
+            prefix = CHANNEL_PREFIXES[channel]
+            for i, h in enumerate(headers):
+                if h.startswith(prefix):
+                    col_idx = i
+                    break
+            if col_idx is None:
+                return None
+
             for row in reader:
                 try:
                     if len(row) > col_idx:
@@ -219,9 +243,19 @@ def load_waveform_data(patient_id, exam_id, channel):
     if cache_key in waveforms_cache:
         return waveforms_cache[cache_key]
     
-    # 데이터 경로
-    exam_folder = Path(MIMIC_DATA_ROOT) / f"p{patient_id}" / exam_id
-    
+    # 데이터 경로 — patients 리스트에서 실제 경로 조회 (p100 외 디렉토리 지원)
+    exam_folder = None
+    for p in patients:
+        if p['patient_id'] == patient_id:
+            for ex in p['exams']:
+                if ex['exam_id'] == exam_id:
+                    exam_folder = Path(ex['path'])
+                    break
+            break
+    # fallback: 기존 방식
+    if exam_folder is None:
+        exam_folder = Path(MIMIC_DATA_ROOT) / f"p{patient_id}" / exam_id
+
     if not exam_folder.exists():
         return None
     
