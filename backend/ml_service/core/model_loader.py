@@ -9,14 +9,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import (
     PREPARED_DIR, WINDOWS_NPY, METADATA_CSV, CHANNELS_JSON,
     LINEAR_CLASSIFIER_PKL, LINEAR_FAISS_BIN, SHAP_NPY,
-    RISK_THRESHOLDS,
+    RISK_THRESHOLDS, ALLOWED_SUBJECTS_JSON,
 )
 
 PROB_BATCH = 2000   # 배치 크기 (메모리 절약)
 
 REQUIRED_FILES = [
     METADATA_CSV, CHANNELS_JSON, LINEAR_CLASSIFIER_PKL,
-    LINEAR_FAISS_BIN, WINDOWS_NPY, SHAP_NPY,
+    LINEAR_FAISS_BIN, WINDOWS_NPY, SHAP_NPY, ALLOWED_SUBJECTS_JSON,
 ]
 
 
@@ -87,6 +87,22 @@ class ModelStore:
         # 별도의 임베딩 배열을 저장/로딩할 필요가 없다.
         print("  Loading linear_faiss.bin...", flush=True)
         self.faiss_index = faiss.read_index(str(LINEAR_FAISS_BIN))
+
+        # --- 유사 신호 검색 후보군: 지정된 환자만 사용 ---
+        # subject_id는 MIMIC-IV 파생 식별자라 코드(공개 저장소)에 두지 않고
+        # prepared_v5/allowed_subjects.json (직접 전달) 에서 읽는다.
+        # IndexFlatIP에 저장된 정규화 임베딩을 reconstruct로 복원해 두면,
+        # 검색 시점에는 이 부분집합에 대해서만 내적(코사인 유사도)을 계산하면 된다.
+        with open(ALLOWED_SUBJECTS_JSON) as f:
+            allowed_subject_ids = json.load(f)
+        allowed_rows = [
+            i for sid in allowed_subject_ids for i in self.subject_map.get(sid, [])
+        ]
+        self.allowed_rows     = np.array(allowed_rows, dtype=np.int64)
+        self.allowed_subjects = self.meta["subject_id"].to_numpy()[self.allowed_rows]
+        self.allowed_embs     = np.vstack(
+            [self.faiss_index.reconstruct(int(r)) for r in self.allowed_rows]
+        ) if len(self.allowed_rows) else np.empty((0, self.faiss_index.d), dtype=np.float32)
 
         # --- channels ---
         with open(CHANNELS_JSON) as f:

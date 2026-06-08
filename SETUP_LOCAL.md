@@ -4,9 +4,9 @@
 파형, 모델, 임베딩 등)는 PhysioNet 데이터 사용 약관상 public 저장소에 커밋하지 않고
 **직접 전달**받아 별도로 배치해야 합니다.
 
-## 1. 보낼 파일 — 정확히 이 목록만 (총 8개: 파일 6 + 폴더 2)
+## 1. 보낼 파일 — 정확히 이 목록만 (총 9개: 파일 7 + 폴더 2)
 
-### (A) ml_service용 — `prepared_v5/`에서 파일 6개
+### (A) ml_service용 — `prepared_v5/`에서 파일 7개
 
 | # | 파일 | 크기 |
 |---|---|---|
@@ -16,18 +16,24 @@
 | 4 | `linear_faiss.bin` | 34MB |
 | 5 | `windows.npy` | **2.4GB** (가장 큼) |
 | 6 | `shap_3d.npy` | 152MB |
+| 7 | `allowed_subjects.json` | <1KB |
 
-> 이 6개는 `ml_service/core/model_loader.py`의 `REQUIRED_FILES`에 정의된 목록과
+> 1~6은 `ml_service/core/model_loader.py`의 `REQUIRED_FILES`에 정의된 목록과
 > 정확히 일치합니다 — 누락되면 실행 시 어떤 파일이 없는지 에러 메시지로 알려줍니다.
 > `scaler_v2.pkl`, `stats_v2.json`, `embeddings.npy`, `faiss_index.bin`, `classifier.pkl`
 > (MOMENT 관련) 등은 코드에서 읽지 않으므로 **보낼 필요 없음**.
+>
+> `allowed_subjects.json`은 유사 신호 검색(faiss) 결과를 특정 환자 목록으로
+> 제한하는 데 쓰입니다. `["p12345678", ...]` 형식의 subject_id 배열이며,
+> MIMIC-IV 파생 식별자이므로 코드(공개 저장소)가 아니라 이 파일을 통해
+> 직접 전달합니다.
 
 ### (B) flask-app용 — `data/mimic4wdb/waves/`에서 폴더 2개
 
 | # | 폴더 | 크기 |
 |---|---|---|
-| 7 | `p100/` (전체) | 17MB |
-| 8 | `p101/p10112163/` | 5.9MB |
+| 8 | `p100/` (전체) | 17MB |
+| 9 | `p101/p10112163/` | 5.9MB |
 
 ## 2. 정확히 어디에 넣어야 하는지
 
@@ -45,14 +51,15 @@
 │   ├── linear_classifier.pkl                         ← (3)
 │   ├── linear_faiss.bin                              ← (4)
 │   ├── windows.npy                                   ← (5)
-│   └── shap_3d.npy                                   ← (6)
+│   ├── shap_3d.npy                                   ← (6)
+│   └── allowed_subjects.json                         ← (7)
 │
 └── data/
     └── mimic4wdb/
         └── waves/
-            ├── p100/                                 ← (7) 폴더 전체를 그대로
+            ├── p100/                                 ← (8) 폴더 전체를 그대로
             └── p101/
-                └── p10112163/                        ← (8)
+                └── p10112163/                        ← (9)
 ```
 
 예) `C:\Users\누군가\projects\Course_medvis`로 클론했다면

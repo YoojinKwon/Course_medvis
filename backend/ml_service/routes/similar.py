@@ -27,38 +27,39 @@ def similar_signals(subject_id):
         return jsonify({"error": f"Patient {subject_id} not found in ML dataset"}), 404
 
     q_row, q_prob = store.best_window_for_patient(subject_id)
-    q_emb = store.query_embedding(q_row)
+    q_emb = store.query_embedding(q_row).reshape(-1)   # (d,), L2-정규화됨
 
-    # Search more than top_k to account for filtering
-    scores, nbrs = store.faiss_index.search(q_emb, top_k * 4)
+    # 후보군: 지정된 30명 환자의 윈도우 중 쿼리 환자 자신은 제외
+    keep = store.allowed_subjects != subject_id
+    rows = store.allowed_rows[keep]
+    embs = store.allowed_embs[keep]
 
     results = []
-    for nb, sc in zip(nbrs[0], scores[0]):
-        if int(nb) == q_row:
-            continue
-        nb_meta = store.meta.iloc[nb]
-        if nb_meta["subject_id"] == subject_id:
-            continue  # skip same patient
+    if len(rows) > 0:
+        sims = embs @ q_emb   # 내적 = 코사인 유사도 (둘 다 정규화된 벡터)
+        order = np.argsort(-sims)[:top_k]
 
-        prob = float(store.all_probs[nb])
-        level = store.prob_to_level(prob)
-        highlight = _highlight_from_shap(store, nb)
+        for rank in order:
+            nb = int(rows[rank])
+            sc = float(sims[rank])
+            nb_meta = store.meta.iloc[nb]
 
-        results.append({
-            "id": f"{nb_meta['subject_id']}_w{int(nb_meta['window_idx'])}",
-            "patient_id": nb_meta["subject_id"],
-            "window_idx": int(nb_meta["window_idx"]),
-            "similarity_score": round(float(sc), 4),
-            "risk_level": level,
-            "risk_prob": round(prob, 4),
-            "label": int(nb_meta["label"]),
-            "highlight_region": highlight,
-            "admission_reason": "ICU 모니터링",
-            "note": f"Window #{int(nb_meta['window_idx'])}, Risk prob: {round(prob, 2)}",
-        })
+            prob = float(store.all_probs[nb])
+            level = store.prob_to_level(prob)
+            highlight = _highlight_from_shap(store, nb)
 
-        if len(results) >= top_k:
-            break
+            results.append({
+                "id": f"{nb_meta['subject_id']}_w{int(nb_meta['window_idx'])}",
+                "patient_id": nb_meta["subject_id"],
+                "window_idx": int(nb_meta["window_idx"]),
+                "similarity_score": round(sc, 4),
+                "risk_level": level,
+                "risk_prob": round(prob, 4),
+                "label": int(nb_meta["label"]),
+                "highlight_region": highlight,
+                "admission_reason": "ICU 모니터링",
+                "note": f"Window #{int(nb_meta['window_idx'])}, Risk prob: {round(prob, 2)}",
+            })
 
     return jsonify({
         "subject_id": subject_id,

@@ -19,6 +19,11 @@ LINEAR_FAISS_BIN      = PREPARED_DIR / "linear_faiss.bin"       # PCA(64) of sca
 WINDOWS_NPY           = PREPARED_DIR / "windows.npy"            # 2.4GB
 SHAP_NPY              = PREPARED_DIR / "shap_3d.npy"            # 152MB
 
+# 유사 신호 검색(faiss) 결과를 제한할 환자 목록.
+# 환자 subject_id는 MIMIC-IV 파생 식별자이므로 public 저장소에 커밋하지 않고
+# prepared_v5/ 와 함께 직접 전달받는 JSON 파일에서 읽는다 (예: ["p12345678", ...]).
+ALLOWED_SUBJECTS_JSON = PREPARED_DIR / "allowed_subjects.json"
+
 ML_PORT = 5003
 
 RISK_THRESHOLDS = {"HIGH": 0.60, "MEDIUM": 0.35}  # prob >= HIGH → HIGH, else MEDIUM, else LOW
