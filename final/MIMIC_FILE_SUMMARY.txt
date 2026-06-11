@@ -1,0 +1,160 @@
+================================================================================
+MedViz - MIMIC-IV 규정 준수 파일 분류 및 GitHub 업로드 현황
+================================================================================
+
+📅 작성일: 2026-06-11
+
+================================================================================
+1️⃣ GITHUB에 올린 파일 ✅ (MIMIC 규정 준수)
+================================================================================
+
+총 용량: ~50KB (안전함)
+
+📄 문서 (6개)
+  - README.md: 프로젝트 개요
+  - SETUP.md: 설치 & 실행 가이드
+  - CUSTOMIZATION.md: 개인 환경 설정
+  - ARCHITECTURE.md: 기술 아키텍처
+  - API_REFERENCE.md: API 명세
+  - DOCS_INDEX.md: 문서 인덱스
+
+🎨 프론트엔드 코드
+  - frontend/icuapp.jsx: React 메인 앱
+  - frontend/icudata.js: 데이터 로더
+  - frontend/ward.jsx: 병실 페이지
+  - frontend/detail.jsx: 상세 페이지
+  - frontend/icoms.jsx: 공유 컴포넌트
+  - frontend/icu.css: 스타일
+  - frontend/*.html: HTML 파일
+
+🔧 백엔드 코드 (MIMIC 규정 준수)
+  ✅ backend/ml_service/
+     - app.py: Flask 메인
+     - config.py: 경로 설정 (수정됨 - 환경변수 사용)
+     - core/model_loader.py: 모델 로더
+     - routes/risk.py: 위험도 API
+     - routes/numerics.py: 시계열 API
+     - routes/shap.py: SHAP API
+     - routes/similar.py: 유사도 API
+
+  ✅ backend/api/
+     - index.py: FastAPI 예제
+
+  ✅ backend/flask-app/
+     - app.py, app_new.py, versions/
+
+  ✅ backend/
+     - test_backend.py: 테스트
+     - vercel.json: 배포 설정
+
+📋 설정
+  - requirements.txt: Python 의존성
+  - .gitignore: 무시 파일 목록
+
+📖 규정 문서
+  - MIMIC_COMPLIANCE.md: MIMIC-IV 규정 완전 가이드
+  - backend/README_BACKEND.md: 백엔드 설정 가이드
+
+================================================================================
+2️⃣ GITHUB에 올리지 않은 파일 ❌ (MIMIC 규정 위반)
+================================================================================
+
+이 파일들은 PhysioNet 규정상 공개할 수 없습니다.
+사용자가 PhysioNet에서 직접 다운로드해야 합니다.
+
+❌ backend/prepared_v5/ (2.6GB) - MIMIC 의료 데이터 기반
+   - windows.npy (2.4GB): 신호 데이터
+   - shap_3d.npy (152MB): SHAP 값
+   - metadata_v2.csv (16MB): 환자 메타데이터
+   - linear_classifier.pkl (148KB): 학습된 모델
+   - linear_faiss.bin (33MB): FAISS 인덱스
+   - allowed_subjects.json (<1KB): 환자 목록
+   - channels.json: 채널 정의 (설정이므로 포함 필요)
+
+❌ database/ (1.9GB) - 의료 데이터베이스
+   - waveform30.db: 환자 임상 기록
+
+================================================================================
+3️⃣ 파일 분류 기준
+================================================================================
+
+✅ 공개 가능 (Public)
+   조건: 데이터를 포함하지 않는 순수 코드
+
+❌ 공개 불가능 (Private - PhysioNet 규정)
+   조건: MIMIC 의료 데이터 기반
+
+🔒 조건부 공개 (Conditional)
+   조건: 코드만 공개, 데이터 경로는 환경변수로 설정
+
+================================================================================
+4️⃣ 사용자 가이드
+================================================================================
+
+MIMIC 데이터를 사용하려는 사용자는 다음 단계를 따르세요:
+
+1. PhysioNet 계정 생성
+   https://physionet.org
+
+2. MIMIC-IV 데이터 다운로드
+   https://physionet.org/content/mimic-iv/
+
+3. 디렉토리 구조 설정
+   prepared_v5/
+   ├── channels.json
+   ├── metadata_v2.csv
+   ├── linear_classifier.pkl
+   ├── linear_faiss.bin
+   ├── windows.npy
+   ├── shap_3d.npy
+   └── allowed_subjects.json
+
+   database/
+   └── waveform30.db
+
+4. 환경변수 설정
+   export PREPARED_DIR=/path/to/prepared_v5
+   export NOTES_DB=/path/to/database/waveform30.db
+   export ML_PORT=5003
+
+5. 서비스 실행
+   pip install -r requirements.txt
+   python backend/ml_service/app.py
+
+================================================================================
+5️⃣ 참고 자료
+================================================================================
+
+📚 문서
+  - MIMIC_COMPLIANCE.md: 파일별 상세 분류
+  - backend/README_BACKEND.md: 백엔드 설정 방법
+  - SETUP.md: 전체 설치 가이드
+
+🔗 외부 링크
+  - MIMIC-IV: https://physionet.org/content/mimic-iv/
+  - PhysioNet: https://physionet.org/
+  - 규정: https://physionet.org/docs/guidelines/
+
+================================================================================
+6️⃣ 보안 체크리스트
+================================================================================
+
+✅ 의료 데이터 제외
+   - windows.npy, shap_3d.npy, *.db 파일 제외
+   - 환자 메타데이터 제외
+
+✅ 코드만 공개
+   - 순수 파이썬 코드만 포함
+   - 데이터 경로는 환경변수로 추상화
+
+✅ 규정 준수
+   - PhysioNet EULA 준수
+   - HIPAA 규정 준수
+   - 환자 개인정보 보호
+
+================================================================================
+
+최종 업데이트: 2026-06-11
+GitHub: https://github.com/YoojinKwon/Course_medvis/tree/main/final
+
+================================================================================
